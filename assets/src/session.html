@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Statecraft: a real run</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  .term { left: 48px; top: 40px; width: 1184px; height: 640px; background: #0b0f14; overflow: hidden; }
+  .bar { height: 40px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; padding: 0 16px; }
+  .bar i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .bar span { flex: 1; text-align: center; font: 13px var(--mono); color: var(--muted); margin-right: 60px; }
+  #log { padding: 18px 26px; font: 15px/24px var(--mono); white-space: pre; }
+  .ln { display: block; min-height: 24px; }
+  .p { color: var(--text); } .p b { color: var(--purple); }
+  .dot { color: var(--green); } .dotp { color: var(--purple); } .dim { color: var(--muted); }
+  .k { color: var(--blue); } .ok { color: var(--green); } .bad { color: var(--red); } .warn { color: var(--amber); }
+  .hd { color: var(--text); font-weight: 700; }
+  .spin { color: var(--amber); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="card term">
+    <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>export-service · feature/export-worker</span></div>
+    <div id="log"></div>
+  </div>
+</div>
+<script src="common.js"></script>
+<script>
+const DURATION = 21000;
+const PROMPT = 'statecraft: fix this branch';
+// [html, appear-at ms, kind]; kind 'spin' lines are replaced by the next line when it appears.
+const lines = [
+  ['<span class="p"><b>&gt;</b> <span id="prompt"></span></span>', 0, 'prompt'],
+  ['', 1700],
+  ['<span class="dotp">⏺</span> Skill(<span class="k">statecraft:statecraft</span>)', 1800],
+  ['<span class="dim">  ⎿  reads AGENTS.md · gate: python3 -m unittest · export_status is public</span>', 2300],
+  ['<span class="dotp">⏺</span> <b>statecraft-auditor-subagent</b> <span class="dim">Audit diff for implicit state</span>', 3000],
+  ['<span class="spin">  ✻ Tracing failure paths in an in-memory DB…</span>', 3500, 'spin', 5200],
+  ['<span class="dim">  ⎿  </span>1 machine · <span class="warn">exports lifecycle in 7 columns</span> · <span class="bad">3 reachable bugs</span>', 5200],
+  ['<span class="dotp">⏺</span> <b>statecraft-converter-subagent</b> <span class="dim">Convert exports lifecycle · worktree</span>', 6200],
+  ['<span class="spin">  ✻ Converting, then running the gate…</span>', 6700, 'spin', 9000],
+  ['<span class="dim">  ⎿  </span><span class="k">335c97d</span> Make exports lifecycle an explicit state machine', 9000],
+  ['<span class="dim">  ⎿  </span><span class="k">0d58576</span> Atomic claim, expiring lease and tracked notification', 9500],
+  ['<span class="dim">  ⎿  </span>Ran 22 tests · <span class="ok">OK</span>', 10000],
+  ['<span class="dot">⏺</span> Merged into feature/export-worker. Gate green. Nothing pushed.', 11000],
+  ['', 11300],
+  ['  <span class="hd">Fixed</span>', 11500],
+  ['  <span class="bad">✗</span>→<span class="ok">✓</span> failed exports were never retried (MAX_ATTEMPTS was dead code)', 11900],
+  ['  <span class="bad">✗</span>→<span class="ok">✓</span> a mail error after a successful build reported "failed"', 12500],
+  ['  <span class="bad">✗</span>→<span class="ok">✓</span> two workers could claim one export; a crash left it "processing"', 13100],
+  ['', 13400],
+  ['  <span class="hd">Model</span>  state: queued · processing · retry_wait · done · failed', 13700],
+  ['         one writer (app/exports.py) · guarded UPDATEs · lease 600 s', 14200],
+  ['  <span class="hd">Kept</span>   export_status response shape', 14800],
+  ['  <span class="hd">Asks</span>   7 notes for you (retry label, migration, lease length, backoff…)', 15400],
+];
+$('#log').innerHTML = lines.map(([h]) => `<span class="ln">${h}</span>`).join('');
+
+function render(t) {
+  const els = $$('#log .ln');
+  lines.forEach(([, at, kind, until], i) => {
+    const el = els[i];
+    const shown = t >= at && !(kind === 'spin' && t >= until);
+    el.style.display = (kind === 'spin' && t >= until) ? 'none' : 'block';
+    el.style.opacity = shown ? out3(prog(t, at, 250)) : 0;
+    if (kind === 'spin' && shown) {
+      const frames = ['✻', '✶', '✳', '✢', '·', '✢', '✳', '✶'];
+      el.firstChild.textContent = el.firstChild.textContent.replace(/^ {2}./, '  ' + frames[Math.floor(t / 120) % frames.length]);
+    }
+  });
+  const p = $('#prompt');
+  const done = typed(p, PROMPT, t, 200, 22);
+  p.innerHTML = p.textContent + (t < 1700 && Math.floor(t / 450) % 2 === 0 ? '<span style="background:#e6edf3">&nbsp;</span>' : '');
+}
+</script>
+</body>
+</html>

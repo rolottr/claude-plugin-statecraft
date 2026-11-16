@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Statecraft: how it works</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  .modes { position: absolute; right: 48px; top: 66px; display: flex; gap: 10px; }
+  .mode { font: 600 16px var(--mono); padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); background: var(--panel); }
+  .mode.on { color: #fff; border-color: var(--purple); background: rgba(188,140,255,.18); box-shadow: 0 0 24px rgba(188,140,255,.25); }
+  .stage { top: 160px; width: 278px; height: 340px; }
+  .rows { padding: 12px 14px; }
+  .row { display: flex; align-items: center; gap: 8px; height: 38px; font: 13px var(--mono); }
+  .path { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar { height: 7px; border-radius: 4px; background: var(--purple); }
+  .score { width: 22px; text-align: right; color: var(--muted); }
+  .track { flex: 1; height: 7px; border-radius: 4px; background: #222a36; overflow: hidden; }
+  .fill { height: 100%; background: var(--blue); border-radius: 4px; }
+  .who { width: 92px; color: var(--muted); }
+  .chips { width: 62px; display: flex; gap: 4px; justify-content: flex-end; }
+  .foot { position: absolute; left: 14px; right: 14px; bottom: 12px; font: 12px var(--sans); color: var(--muted); }
+  .scanline { position: absolute; left: 1px; right: 1px; height: 38px; background: linear-gradient(90deg, transparent, rgba(188,140,255,.16), transparent); border-top: 1px solid rgba(188,140,255,.4); border-bottom: 1px solid rgba(188,140,255,.4); }
+  .crow { display: grid; grid-template-columns: 26px 1fr; gap: 2px 8px; padding: 6px 0; font: 13px var(--mono); border-bottom: 1px solid #222a36; }
+  .crow .what { grid-column: 2; font: 12px var(--sans); color: var(--muted); }
+  .gate { display: flex; gap: 12px; font: 13px var(--mono); margin-top: 4px; color: var(--muted); padding-left: 2px; }
+  .wt { font: 14px var(--mono); padding: 10px 0 12px; border-bottom: 1px solid #222a36; }
+  .arrow { position: absolute; top: 318px; width: 24px; text-align: center; font: 700 20px var(--sans); color: var(--purple); }
+  #git { position: absolute; left: 48px; right: 48px; top: 538px; height: 60px; }
+  #gitline { position: absolute; left: 110px; right: 0; top: 22px; height: 3px; background: var(--line); border-radius: 2px; }
+  #gitfill { position: absolute; left: 110px; top: 22px; height: 3px; background: var(--green); border-radius: 2px; }
+  .glabel { position: absolute; left: 0; top: 13px; font: 600 13px var(--mono); color: var(--muted); }
+  .merge { position: absolute; top: 14px; width: 19px; height: 19px; border-radius: 50%; background: var(--bg); border: 3px solid var(--green); }
+  .mlabel { position: absolute; top: 40px; font: 12px var(--mono); color: #aff5b4; transform: translateX(-40%); white-space: nowrap; }
+  #diffnote { position: absolute; left: 350px; top: 136px; width: 278px; text-align: center; font: 600 13px var(--mono); color: var(--purple); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="brand">◆ <b>statecraft</b></div>
+  <div class="title">How it works</div>
+  <div class="sub">Any language, any stack. Your project's rules and quality gate.</div>
+  <div class="modes"><div class="mode" id="m-diff">diff</div><div class="mode" id="m-sweep">sweep</div><div class="mode" id="m-fix">fix</div></div>
+
+  <div class="card stage" id="k1" style="left:48px;"><h3>1 · scan</h3>
+    <div class="scanline" id="scan"></div>
+    <div class="rows" id="scanrows"></div>
+    <div class="foot">candidates.py ranks files by lifecycle signals. A heuristic, not a verdict.</div>
+  </div>
+  <div class="arrow" id="a1" style="left:326px;">→</div>
+  <div class="card stage" id="k2" style="left:350px;"><h3>2 · audit in parallel</h3>
+    <div class="rows" id="audrows"></div>
+    <div class="foot">Read-only subagents, one module each. Every invalid state traced to a real path.</div>
+  </div>
+  <div class="arrow" id="a2" style="left:628px;">→</div>
+  <div class="card stage" id="k3" style="left:652px;"><h3>3 · catalogue</h3>
+    <div class="rows" id="catrows"></div>
+    <div class="foot" id="catfoot">2 duplicates merged · highs re-checked</div>
+  </div>
+  <div class="arrow" id="a3" style="left:930px;">→</div>
+  <div class="card stage" id="k4" style="left:954px;"><h3>4 · convert</h3>
+    <div class="rows" id="convrows"></div>
+    <div class="foot">One machine per worktree. The gate is your project's own.</div>
+  </div>
+  <div id="diffnote">your branch's diff only</div>
+
+  <div id="git">
+    <div class="glabel">your branch</div>
+    <div id="gitline"></div><div id="gitfill"></div>
+  </div>
+
+  <div class="caption" id="c1"><em>sweep</em>: a quick scan ranks the files most likely to hide a lifecycle.</div>
+  <div class="caption" id="c2">Read-only auditors take one module each, in parallel, and trace every path.</div>
+  <div class="caption" id="c3">Findings are merged, the high ones re-checked, and ranked by user impact.</div>
+  <div class="caption" id="c4"><em>fix</em>: one converter per machine, each in its own worktree, behind your quality gate.</div>
+  <div class="caption" id="c5">Merged one at a time, gate green after each. It never pushes, deploys or migrates.</div>
+  <div class="caption" id="c6"><em>diff</em>: the same auditor on just your branch, before you push.</div>
+</div>
+<script src="common.js"></script>
+<script>
+const DURATION = 19000;
+const scan = [
+  ['services/orders/payment.py', 18], ['workers/export_job.go', 16], ['api/uploads.ts', 12],
+  ['billing/subscription.rb', 10], ['web/useCheckout.tsx', 6], ['lib/http/retry.py', 4],
+];
+$('#scanrows').innerHTML = scan.map(([p, s]) => `<div class="row"><span class="path">${p}</span><span class="bar" style="width:0"></span><span class="score">${s}</span></div>`).join('');
+const auditors = [['orders/', ['h']], ['workers/', ['h', 'm']], ['api/', ['m']], ['billing/ web/', ['m', 'l']]];
+const durs = [2100, 1500, 2500, 1800];
+$('#audrows').innerHTML = auditors.map(([w, cs]) => `<div class="row"><span class="who">${w}</span><span class="track"><span class="fill" style="width:0;display:block"></span></span><span class="chips">${cs.map((c) => `<span class="chip ${c}">${c.toUpperCase()}</span>`).join('')}</span></div>`).join('');
+const cat = [
+  ['h', 'Payment', 'charged twice when a retry races'], ['h', 'ExportJob', 'failed jobs are never retried'],
+  ['m', 'Upload', 'a stale completion wins'], ['m', 'Subscription', 'status compared in 9 files'], ['l', 'Checkout', 'representable, not reachable'],
+];
+$('#catrows').innerHTML = cat.map(([s, o, w]) => `<div class="crow"><span class="chip ${s}">${s.toUpperCase()}</span><span>${o}</span><span class="what">${w}</span></div>`).join('');
+const conv = ['statecraft/payment', 'statecraft/export-job', 'statecraft/upload'];
+$('#convrows').innerHTML = conv.map((b) => `<div class="wt"><span style="color:var(--muted)">worktree</span> ${b.split('/')[1]}<div class="gate"><span>build ·</span><span>tests ·</span><span>lint ·</span></div></div>`).join('');
+const merges = [0.18, 0.5, 0.82].map((x, i) => {
+  const d = document.createElement('div'); d.className = 'merge'; d.style.left = `calc(110px + (100% - 110px) * ${x} - 9px)`;
+  const l = document.createElement('div'); l.className = 'mlabel'; l.style.left = `calc(110px + (100% - 110px) * ${x})`; l.textContent = `merge ${conv[i].split('/')[1]} · gate ✓`;
+  $('#git').append(d, l); return [d, l];
+});
+
+function render(t) {
+  $('#m-sweep').classList.toggle('on', t < 9700);
+  $('#m-fix').classList.toggle('on', t >= 9700 && t < 16100);
+  $('#m-diff').classList.toggle('on', t >= 16100);
+
+  const dim = (t >= 16100) ? 1 - 0.7 * out3(prog(t, 16100, 500)) : 1;
+  vis($('#git'), t, 13300, Infinity, 300, 6);
+  vis($('#k1'), t, 200); vis($('#k2'), t, 3200); vis($('#k3'), t, 6600); vis($('#k4'), t, 9800);
+  ['#k1', '#k3', '#k4', '#git'].forEach((s) => { $(s).style.opacity = parseFloat($(s).style.opacity) * dim; });
+  $('#diffnote').style.opacity = out3(prog(t, 16400, 400));
+  $('#k2').style.boxShadow = t >= 16100 ? `0 0 0 ${2 * out3(prog(t, 16100, 500))}px rgba(188,140,255,.8), 0 20px 50px rgba(0,0,0,.35)` : '';
+
+  // 1 · scan
+  $$('#scanrows .row').forEach((el, i) => {
+    vis(el, t, 500 + i * 160, Infinity, 250, 6);
+    el.querySelector('.bar').style.width = `${scan[i][1] * 5 * out3(prog(t, 1000 + i * 260, 700))}px`;
+  });
+  const sk = prog(t, 800, 2200);
+  $('#scan').style.top = `${52 + sk * 6 * 38}px`;
+  $('#scan').style.opacity = sk > 0 && sk < 1 ? 1 : 0;
+
+  // 2 · audit
+  $$('#audrows .row').forEach((el, i) => {
+    vis(el, t, 3400 + i * 150, Infinity, 250, 6);
+    const k = inOut(prog(t, 3700, durs[i]));
+    el.querySelector('.fill').style.width = `${k * 100}%`;
+    el.querySelector('.fill').style.background = k >= 1 ? 'var(--green)' : 'var(--blue)';
+    el.querySelectorAll('.chip').forEach((c, j) => { c.style.opacity = out3(prog(t, 3700 + durs[i] + j * 180, 250)); });
+  });
+
+  // 3 · catalogue
+  $$('#catrows .crow').forEach((el, i) => vis(el, t, 6900 + i * 330, Infinity, 300, 8));
+  vis($('#catfoot'), t, 8900, Infinity, 300, 4);
+
+  // 4 · convert
+  $$('#convrows .wt').forEach((el, r) => {
+    vis(el, t, 10000 + r * 280, Infinity, 300, 8);
+    el.querySelectorAll('.gate span').forEach((s, j) => {
+      const at = 10700 + r * 900 + j * 300;
+      const label = ['build', 'tests', 'lint'][j];
+      if (r === 1 && j === 1 && t >= at && t < at + 1300) { s.innerHTML = `${label} <b class="bad">✗</b> <span style="color:var(--amber)">fixing</span>`; return; }
+      const done = t >= at + (r === 1 && j >= 1 ? 1300 : 0);
+      s.innerHTML = done ? `${label} <b class="ok">✓</b>` : `${label} ·`;
+    });
+  });
+
+  // git line
+  $('#gitfill').style.width = `calc((100% - 110px) * ${0.9 * inOut(prog(t, 13600, 2400))})`;
+  merges.forEach(([d, l], i) => { const k = out3(prog(t, 13800 + i * 750, 300)); d.style.opacity = k; l.style.opacity = k; });
+
+  [['#a1', 3000], ['#a2', 6400], ['#a3', 9600]].forEach(([s, at]) => { $(s).style.opacity = out3(prog(t, at, 300)) * (t >= 16100 ? dim : 1); });
+
+  vis($('#c1'), t, 300, 3200); vis($('#c2'), t, 3400, 6500); vis($('#c3'), t, 6700, 9600);
+  vis($('#c4'), t, 9800, 13200); vis($('#c5'), t, 13400, 16000); vis($('#c6'), t, 16200);
+}
+</script>
+</body>
+</html>

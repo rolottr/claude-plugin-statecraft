@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Statecraft: the problem</title>
+<link rel="stylesheet" href="common.css">
+<style>
+  .code { padding: 16px 20px; font: 15px/25px var(--mono); white-space: pre; position: absolute; left: 0; top: 44px; }
+  .code .ln { display: block; }
+  .kw { color: var(--blue); } .ty { color: var(--muted); } .str { color: #a5d6ff; } .cm { color: var(--muted); }
+  .hl { border-radius: 3px; }
+  #grid { position: absolute; left: 590px; top: 196px; width: 642px; display: grid; grid-template-columns: repeat(4, 150px); gap: 14px; }
+  .legend { position: absolute; left: 590px; top: 162px; font: 13px var(--mono); color: var(--muted); }
+  .legend span { color: var(--purple); }
+  .cell { height: 132px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); padding: 12px 14px; position: relative; }
+  .dots { display: flex; gap: 7px; }
+  .dot { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--purple); }
+  .dot.on { background: var(--purple); }
+  .name { margin-top: 14px; font: 600 16px var(--mono); }
+  .bug { margin-top: 8px; font: 13px/17px var(--sans); color: #ffb1ab; }
+  .mark { position: absolute; right: 12px; top: 9px; font: 700 17px var(--sans); }
+  #diagram { position: absolute; left: 590px; top: 160px; width: 642px; height: 330px; }
+  .node rect { fill: var(--panel); stroke-width: 2; }
+  .node text { fill: var(--text); font: 600 16px var(--mono); text-anchor: middle; dominant-baseline: middle; }
+  .edge { fill: none; stroke: var(--muted); stroke-width: 2; }
+  .elabel { fill: var(--muted); font: 13px var(--mono); text-anchor: middle; }
+  #badges { position: absolute; left: 48px; top: 548px; display: flex; gap: 14px; }
+  .badge { font: 500 15px var(--sans); padding: 9px 14px; border-radius: 999px; background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.35); color: #aff5b4; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="brand">◆ <b>statecraft</b></div>
+  <div class="title" id="t1">A lifecycle hidden in four columns</div>
+  <div class="title" id="t2">Statecraft makes it one explicit state</div>
+  <div class="sub" id="s1">An export job, stored the way many backends store it.</div>
+  <div class="sub" id="s2">Same behaviour, same API response. The bugs can no longer be stored.</div>
+
+  <div class="card" style="left:48px; top:160px; width:510px; height:350px;">
+    <h3 id="cardTitle">exports table</h3>
+    <div class="code" id="before"></div>
+    <div class="code" id="after"></div>
+  </div>
+
+  <div class="legend" id="legend">● = set &nbsp; <span>is_processing</span> · <span>finished_at</span> · <span>failed_at</span></div>
+  <div id="grid"></div>
+
+  <svg id="diagram" viewBox="0 0 642 330">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/>
+      </marker>
+    </defs>
+    <path class="edge" id="e1" d="M152 153 L226 153" marker-end="url(#arrow)"/>
+    <path class="edge" id="e2" d="M362 138 L474 74" marker-end="url(#arrow)"/>
+    <path class="edge" id="e3" d="M362 168 L474 236" marker-end="url(#arrow)"/>
+    <path class="edge" id="e4" d="M285 178 C 262 268, 112 268, 92 182" marker-end="url(#arrow)"/>
+    <text class="elabel" id="l1" x="189" y="140">claim</text>
+    <text class="elabel" id="l2" x="400" y="88">built</text>
+    <text class="elabel" id="l3" x="455" y="190">attempts = 3</text>
+    <text class="elabel" id="l4" x="188" y="262">retry · attempts &lt; 3</text>
+    <g class="node" id="n1"><rect x="20" y="130" width="130" height="46" rx="10" stroke="#58a6ff"/><text x="85" y="154">queued</text></g>
+    <g class="node" id="n2"><rect x="230" y="130" width="130" height="46" rx="10" stroke="#d29922"/><text x="295" y="154">processing</text></g>
+    <g class="node" id="n3"><rect x="480" y="40" width="130" height="46" rx="10" stroke="#3fb950"/><text x="545" y="64">done</text></g>
+    <g class="node" id="n4"><rect x="480" y="226" width="130" height="46" rx="10" stroke="#f85149"/><text x="545" y="250">failed</text></g>
+  </svg>
+
+  <div id="badges">
+    <div class="badge">✓ invalid states can't be stored</div>
+    <div class="badge">✓ one owner for every transition</div>
+    <div class="badge">✓ API response unchanged</div>
+    <div class="badge">✓ a test per transition</div>
+  </div>
+
+  <div class="caption" id="c1">The database will store every combination of these three fields: <em>2³ = 8</em>.</div>
+  <div class="caption" id="c2">Only <em>4</em> of them mean something.</div>
+  <div class="caption" id="c3">The other 4 are reachable, and each one is a bug a user will hit.</div>
+  <div class="caption" id="c4">One status column, constraints for each state's data, one guarded update per transition.</div>
+  <div class="caption" id="c5">Found by parallel auditors, converted in isolated worktrees, <em>behind your own quality gate</em>.</div>
+</div>
+<script src="common.js"></script>
+<script>
+const DURATION = 17500;
+const SPLIT = 9000;
+
+const before = [
+  '<span class="kw">CREATE TABLE</span> exports (',
+  '  id             <span class="ty">INTEGER PRIMARY KEY</span>,',
+  '  <span class="hl" data-f>is_processing</span>  <span class="ty">BOOLEAN DEFAULT 0</span>,',
+  '  <span class="hl" data-f>finished_at</span>    <span class="ty">TIMESTAMP NULL</span>,',
+  '  <span class="hl" data-f>failed_at</span>      <span class="ty">TIMESTAMP NULL</span>,',
+  '  attempts       <span class="ty">INTEGER DEFAULT 0</span>,',
+  '  error_message  <span class="ty">TEXT NULL</span>,',
+  '  download_url   <span class="ty">TEXT NULL</span>',
+  ');',
+];
+const after = [
+  '<span class="kw">CREATE TABLE</span> exports (',
+  '  id            <span class="ty">INTEGER PRIMARY KEY</span>,',
+  '  <span class="hl" style="color:#d2a8ff; background:rgba(188,140,255,.22); box-shadow:0 0 0 3px rgba(188,140,255,.22)">status</span>        <span class="ty">TEXT NOT NULL</span> <span class="kw">CHECK</span> (status <span class="kw">IN</span>',
+  '    (<span class="str">\'queued\'</span>, <span class="str">\'processing\'</span>, <span class="str">\'done\'</span>, <span class="str">\'failed\'</span>)),',
+  '  attempts      <span class="ty">INTEGER NOT NULL</span>,',
+  '  lease_until   <span class="ty">TIMESTAMP NULL</span>,',
+  '  download_url  <span class="ty">TEXT</span> <span class="kw">CHECK</span> (status &lt;&gt; <span class="str">\'done\'</span>',
+  '                <span class="kw">OR</span> download_url <span class="kw">IS NOT NULL</span>)',
+  ');',
+  '<span class="cm">-- claim: UPDATE … SET status = \'processing\'</span>',
+  '<span class="cm">--        WHERE id = ? AND status = \'queued\'</span>',
+];
+$('#before').innerHTML = before.map((l) => `<span class="ln">${l}</span>`).join('');
+$('#after').innerHTML = after.map((l) => `<span class="ln">${l}</span>`).join('');
+
+const cells = [
+  [0, 0, 0, 'queued', true, ''],
+  [1, 0, 0, 'processing', true, ''],
+  [0, 1, 0, 'done', true, ''],
+  [0, 0, 1, 'failed', true, ''],
+  [1, 0, 1, 'processing<br>+ failed', false, 'stuck: the retry never runs'],
+  [0, 1, 1, 'done + failed', false, 'built, yet reported "failed"'],
+  [1, 1, 1, 'all three', false, 'mail error after the build'],
+  [1, 1, 0, 'processing<br>+ done', false, 'crash between two writes'],
+];
+$('#grid').innerHTML = cells.map(([p, f, x, name, ok, bug]) => `
+  <div class="cell" data-ok="${ok}">
+    <div class="dots"><i class="dot ${p ? 'on' : ''}"></i><i class="dot ${f ? 'on' : ''}"></i><i class="dot ${x ? 'on' : ''}"></i></div>
+    <div class="mark"></div><div class="name">${name}</div><div class="bug">${bug}</div>
+  </div>`).join('');
+
+const edges = ['#e1', '#e2', '#e3', '#e4'].map((s) => { const el = $(s); const n = el.getTotalLength(); el.style.strokeDasharray = n; return [el, n]; });
+
+function render(t) {
+  vis($('#t1'), t, 0, SPLIT); vis($('#s1'), t, 150, SPLIT);
+  vis($('#t2'), t, SPLIT + 300); vis($('#s2'), t, SPLIT + 450);
+  $('#cardTitle').textContent = t < SPLIT + 300 ? 'exports table' : 'exports table · after statecraft';
+
+  $$('#before .ln').forEach((el, i) => vis(el, t, 300 + i * 230, SPLIT, 250, 6));
+  $$('#after .ln').forEach((el, i) => vis(el, t, SPLIT + 500 + i * 140, Infinity, 250, 6));
+  const glow = out3(prog(t, 2500, 400)) * (1 - prog(t, SPLIT, 300));
+  $$('#before [data-f]').forEach((el) => { el.style.background = `rgba(188,140,255,${0.22 * glow})`; el.style.boxShadow = `0 0 0 3px rgba(188,140,255,${0.22 * glow})`; el.style.color = glow > 0.5 ? '#d2a8ff' : ''; });
+
+  vis($('#legend'), t, 2700, SPLIT);
+  $$('.cell').forEach((el, i) => {
+    vis(el, t, 3000 + i * 190, SPLIT, 300, 10);
+    const ok = el.dataset.ok === 'true';
+    const judged = t >= (ok ? 5000 : 6300) + (ok ? i : i - 4) * 160;
+    el.style.borderColor = judged ? (ok ? 'rgba(63,185,80,.7)' : 'rgba(248,81,73,.75)') : '';
+    el.style.background = judged ? (ok ? 'rgba(63,185,80,.08)' : 'rgba(248,81,73,.09)') : '';
+    const mark = el.querySelector('.mark');
+    mark.textContent = judged ? (ok ? '✓' : '✗') : '';
+    mark.className = 'mark ' + (ok ? 'ok' : 'bad');
+    const bug = el.querySelector('.bug');
+    bug.style.opacity = ok ? 0 : out3(prog(t, 6500 + (i - 4) * 350, 400));
+  });
+
+  vis($('#c1'), t, 2800, 4900); vis($('#c2'), t, 5000, 6200); vis($('#c3'), t, 6300, SPLIT);
+  vis($('#c4'), t, SPLIT + 600, 13400); vis($('#c5'), t, 13600);
+
+  const nodes = ['#n1', '#n2', '#n3', '#n4'];
+  nodes.forEach((s, i) => { const k = out3(prog(t, SPLIT + 700 + i * 350, 400)); $(s).style.opacity = k; });
+  edges.forEach(([el, n], i) => { const k = inOut(prog(t, SPLIT + 1200 + i * 450, 600)); el.style.strokeDashoffset = n * (1 - k); el.style.opacity = k > 0 ? 1 : 0; });
+  ['#l1', '#l2', '#l3', '#l4'].forEach((s, i) => { $(s).style.opacity = out3(prog(t, SPLIT + 1600 + i * 450, 300)); });
+  $$('.badge').forEach((el, i) => vis(el, t, SPLIT + 3300 + i * 260, Infinity, 350, 10));
+}
+</script>
+</body>
+</html>

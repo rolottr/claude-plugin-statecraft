@@ -62,7 +62,8 @@ Orchestrate the `statecraft-audit` and `statecraft-convert` rubrics through suba
    one place, contracts stable, tests for failure paths, gate green. Send fixes back to the same converter with
    SendMessage rather than starting over.
 4. Merge the worktree branches into the user's current branch one at a time, run the full gate after each merge, and
-   stop at the first red gate.
+   stop at the first red gate. After a branch is merged and green, remove its worktree (`git worktree remove`) and
+   delete its branch; keep the worktree of anything not merged and say where it is.
 5. Never run migrations against non-local databases, deploy, or push. Changes that need a public-contract decision or
    a later "contract" release are listed for the user, not done.
 
