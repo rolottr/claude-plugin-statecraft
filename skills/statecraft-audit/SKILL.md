@@ -79,6 +79,9 @@ the reachability analysis, not your confidence.
 - Already-explicit machines, unless the code bypasses them (writes the status directly, adds a flag beside them,
   handles a case outside the transition function).
 - Generated or vendored code.
+- A machine already converted by statecraft that is in its expand phase: one owner writes the new state and still
+  writes the replaced columns for compatibility. Report it once, as low, "contract phase pending", not as scattered
+  state.
 
 ## Required analysis for every candidate
 
@@ -102,8 +105,9 @@ worker, the consumer, the client, the migration) is in the repository, read it.
    - **State the deployment assumption** a path needs (more than one instance, more than one worker, concurrent
      requests per user) and where you established it (config, code, docs). If you could not establish it from the
      repository, say "assumed" and cap the finding at medium.
-   - **Reproduce when it is cheap**: an in-memory run or a scratch script in a temporary directory (`mktemp -d`),
-     never inside the repository.
+   - **Reproduce when it is cheap**: an in-memory run, or a scratch script in a temporary directory. Create the
+     directory with `mktemp -d` as its own command and use the printed path literally afterwards (the harness may
+     refuse compound commands); never work inside the repository, and delete the directory when done.
 5. **Impact on all three experiences.**
    - UX: what a user or API caller sees (stuck spinner, lost request, double charge, duplicate email, wrong status,
      job never retried, error never shown).
@@ -133,13 +137,23 @@ Calibrate honestly. Over-reporting makes people stop listening.
 - **diff**: report only machines the diff creates, extends (a new flag, a new nullable field, a new status literal, a
   new transition outside the owner) or breaks (bypasses an existing explicit machine). Mention untouched code only to
   explain a finding in the diff.
-- **sweep**: cover the whole shard. The candidate list is a starting point, not the boundary, and it can miss things
-  (it ranks by names). Follow a machine outside your shard when its transitions go there, and list every path.
-- **diff-review**: the diff is a statecraft conversion. Check it against the `statecraft-convert` rules and report
-  each violation as a finding: characterization tests missing, changed after the first commit, or not covering a
-  touched transition; a bug test that would pass on the base commit; in-memory flags left writable; persisted old
-  columns no longer written; transitions outside the owner; a contract change (shape, values, errors); new behaviour
-  that fixes no listed bug; a new implicit machine. Also report any finding the conversion missed.
+- **sweep**: cover the shard. Read the candidates' hotspots and every file that writes a persisted model in the shard
+  in full; skim the rest. The candidate list is a starting point, not the boundary, and it can miss things (it ranks
+  by names). Follow a machine outside your shard when its transitions go there, and list every path. Your coverage
+  line says honestly what you read, skimmed and did not read.
+- **diff-review**: the diff is a statecraft conversion in the worktree named in `### Worktree`. Read files there. To
+  run tests, copy the branch into a temporary directory (`mktemp -d` on its own, then
+  `git -C <worktree> archive <branch> | tar -x -C <path>`) and run them in the copy, never in the worktree or the
+  user's checkout. Report each of these as a finding:
+  - **every outcome a caller or user can observe that differs from the base commit** (responses and values, errors,
+    side effects, timings, public functions and types, rollout constraints), each marked as on or **not on** the
+    `### Approved changes` list; anything not on it is high;
+  - characterization tests missing, changed after their first commit, or not covering a touched transition;
+  - a bug test that would pass on the base commit, or fails there only by a compile or import error;
+  - replaced fields not handled as the convert rubric's rule 1 says (in memory: deleted or read-only derived;
+    persisted: still written by the owner, no longer read except to derive unmigrated rows);
+  - transitions outside the owner; new behaviour that fixes no listed bug; a new implicit machine;
+  - any finding the conversion missed.
 
 ## Output
 

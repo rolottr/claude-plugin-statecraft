@@ -7,6 +7,8 @@
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 target=${1:-export-service}
+while [ "${target%/}" != "$target" ]; do target=${target%/}; done   # export-service/ -> export-service
+case "$target" in ""|.|..|/) echo "choose a new directory name" >&2; exit 1 ;; esac
 origin="$target-origin.git"
 for path in "$target" "$origin"; do
   [ -e "$path" ] && { echo "$path already exists" >&2; exit 1; }

@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.3.0
+
+Fixes from a second adversarial review (of 0.2.0), plus the first runs of diff mode and of a multi-shard sweep.
+
+**Your checkout is never modified**
+- Landing, gating and rollback happen in a separate integration worktree (`.claude/worktrees/statecraft-<date>`).
+  0.2.0 cherry-picked and ran `git reset --hard` in the user's checkout, which could destroy edits made during a run.
+  Tested: a file edited mid-run survived, and the merge was held back until it is committed.
+- Rollback uses `reset --keep`; any cherry-pick failure (conflict, signing, empty range, hook) is aborted and reported;
+  converter branches are checked for ancestry and commit count before landing.
+- The branch is `statecraft-<YYYYMMDD-HHMM>`, with a suffix if it exists; `BASE` is a sha, so a detached HEAD works.
+- `.claude/worktrees/` is added to `.git/info/exclude`, so kept worktrees and symlinked dependency directories no
+  longer make the next run refuse to start or block cleanup.
+
+**Nothing visible changes without a yes**
+- Before converting, the orchestrator lists every outcome callers or users will see change, bug fixes included, and
+  waits for the user. A non-interactive run stops after the plan unless the request accepts the bug fixes' changes.
+- Converters get the finding blocks verbatim and the approved list; anything visible that is not on it is reported,
+  not made. The diff-review auditor lists every outcome that differs from the base against that list.
+- Public functions and types other code imports are part of the contract.
+
+**Converters**
+- The worktree check also compares against the user's checkout and the integration worktree, so it holds when the
+  user works in a linked worktree.
+- "Fails on base" runs in separate simple commands with a `mktemp -d` path, and must fail by assertion, not by a
+  compile or import error.
+- One rule for replaced fields (in memory: deleted or derived read-only; persisted: still written, no longer read).
+  Guarded transitions keep today's outcome when the guard does not match. An existing single status column gets an
+  owner and a constraint instead of a new column; new columns are nullable with no default.
+- Document stores, messages in flight and databases on user devices are covered. Commit hooks run; `--no-verify` is
+  forbidden. Targeted tests while working, the full gate once at the end, one re-run for flakes. `maxTurns` set on
+  both agents.
+
+**Orchestrator and review**
+- The orchestrator loads the audit and convert rubrics before applying them. The conventions brief carries facts,
+  never a design.
+- Diff-review gets the converter's worktree, runs tests only in a temporary copy, and runs again after each fix round.
+- Sweep shards are sized by lines (about 20,000); the repository-wide scan uses `--full`; small scopes are audited
+  directly with the rubric loaded.
+- A converted machine in its expand phase is reported once as low, not as scattered state.
+
+**candidates.py**
+- A real lexer replaces the comment stripper: `"*/*"`, `"/static/*"` and SQL in triple-quoted strings no longer
+  swallow the rest of a file (0.2.0 lost 11,000 lines across 33 Kubernetes files). Words in strings don't count, except
+  column names in SQL strings; Rust lifetimes are handled.
+- Finds Django and SQLAlchemy models, Rails migrations, C# auto-properties, `useState` clusters and boolean fields
+  assigned `true`/`false`. `const` lines are no longer dropped. TypeScript union and interface members, switch arms
+  and Go named string types are not scored.
+- Reports files of types it doesn't read; each `--paths` entry is listed on its own (an ignored one falls back to the
+  filesystem with a note); `--paths build/x` is honoured; `--full`; exact line counts; `unittests/` and `*Test.cpp`
+  count as tests; the Python version check runs before any newer syntax.
+
+**Example**: `make-repo.sh target/` works; the example no longer ignores `.claude/`, so it exercises the exclude step.
+
 ## 0.2.0
 
 Fixes from an adversarial review of 0.1.0.

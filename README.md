@@ -65,24 +65,34 @@ Ask in your own words; Claude picks the mode.
 | You ask | Mode | What happens |
 | --- | --- | --- |
 | "statecraft this branch" | **diff** | One auditor reviews your branch's diff for new or extended implicit state, or for code that bypasses an existing explicit machine. Afterwards it reads the PR discussion, if a PR exists. Report only. Use it before you push. |
-| "find all the implicit state machines in this service" | **sweep** | The repo is split into shards, a quick scan ranks each shard's files, and read-only auditors run in parallel. Findings are merged, the high ones re-checked, and the report says what was and wasn't read. Report only, then it offers to convert. |
-| "statecraft: fix this branch" | **fix** | Converts the findings in the scope you named: this branch's diff, or a sweep's. Converters run in their own worktrees (at most 3 at a time), and results land on a new `statecraft/<date>` branch. |
+| "find all the implicit state machines in this service" | **sweep** | The repo is split into shards of about 20,000 lines, a quick scan ranks each shard's files, and auditors run in parallel. Findings are merged, the high ones re-checked, and the report says what was and wasn't read. Small scopes (about 30 files) are audited directly, without subagents. Report only, then it offers to convert. |
+| "statecraft: fix this branch" | **fix** | Converts the findings in the scope you named: this branch's diff, or a sweep's. First it lists every change callers will see and waits for your yes. Converters then run in their own worktrees (at most 3 at a time), and results land on a new `statecraft-<date>` branch built in a separate worktree. |
 
 ### How fix mode keeps your code safe
 
+- **Asks before anything visible changes.** Before converting, it lists every outcome a caller or user will see change:
+  responses and values, errors, emails, retries, and rollout constraints such as "stop old workers first". Bug fixes
+  count too. Nothing is converted until you say yes. In a non-interactive run it stops after the plan, unless your
+  request already accepts the changes the bug fixes need.
+- **Never touches your checkout.** Results are landed, gated and rolled back in a separate integration worktree, so
+  you can keep working while it runs. In testing, an edit made mid-run survived. At the end it offers the merge, and
+  only once your working tree is clean.
 - **Starts clean.** It refuses to start with uncommitted changes, and checks that your gate passes first.
 - **Pins behaviour first.** Converters write tests of today's behaviour before changing anything, prove them on the
   base commit, and commit them separately; they must still pass unchanged afterwards. Each fixed bug gets a test that
   is shown to fail on the base commit.
-- **Adds new behaviour only to fix a bug.** Leases, cancellation, outboxes and new states visible to callers come in
-  only when they fix a bug the audit found. Anything else is listed as a proposal.
-- **Keeps contracts stable.** APIs, events, shared tables and SDK types keep their shape, values and errors. Changing
-  one is reported as a decision for you.
+- **Adds new behaviour only to fix a bug, and only as approved.** Leases, cancellation, outboxes and new states visible
+  to callers come in only when they fix a bug the audit found and you approved the visible effect. Anything else is
+  listed as a proposal.
+- **Keeps contracts stable.** APIs, events, shared tables, SDK types and functions other code imports keep their
+  shape, values and errors unless you approved a change.
 - **Migrates in two releases.** This change adds and writes the new column while still writing the old ones, and
   includes a backfill covering every old combination plus a read-only count query to run in production first.
   Validating constraints and dropping the old columns is left to a later release that you run.
-- **Gets checked twice.** Every converter branch is reviewed by an independent auditor and by the orchestrator, then
-  lands on the new branch only if the gate passes. Your own branch is untouched until you say yes.
+- **Gets checked twice.** Every converter branch is reviewed by an independent auditor, which lists every outcome that
+  differs from the base and checks it against your approval, and by the orchestrator. Fixes are re-reviewed. A branch
+  lands only if its ancestry checks out and the gate passes; a failed landing is rolled back on the integration branch
+  only.
 - **Never** pushes, deploys, or connects to a database that isn't local.
 
 ### Worktree setup for real projects
@@ -96,7 +106,27 @@ documented install command, and you can make that faster or unnecessary with Cla
   files that point at your local database.
 
 Statecraft resets each converter's worktree to the commit it should start from, so it works with any
-`worktree.baseRef` setting.
+`worktree.baseRef` setting. Worktrees live in `.claude/worktrees/`, which fix mode adds to `.git/info/exclude` (a local
+file, never committed) so they don't show up in `git status`.
+
+### What it costs
+
+These are measured runs. Costs depend mostly on how much code the auditors and converters read.
+
+| Run | Scope | Time | Cost |
+| --- | --- | --- | --- |
+| diff | the example branch (31-line worker) | 2 min | $1.63 |
+| fix, stopped for approval | the example branch | 2 min | $1.56 |
+| fix, approved | the example branch | 15 min | $7.30 |
+| sweep, 4 shards in parallel | Spark `scheduler`, `deploy`, `storage` (193 files, 53k lines) | 11 min | $17.78 |
+
+That Spark sweep found 33 machines, 19 of them with reachable invalid states. The orchestrator re-read the code
+behind all 6 high findings and downgraded one.
+
+### Headless and CI
+
+In `claude -p`, the orchestrator is woken again each time a subagent finishes, so `--output-format stream-json` can
+contain several `result` events. The last one is the full report.
 
 ## How it works
 
@@ -110,7 +140,7 @@ skills, thin subagents load them, and an orchestrator runs the subagents in para
 ```mermaid
 flowchart LR
   SC["statecraft<br/>(orchestrator skill)"] --> CAND["candidates.py<br/>scan per shard"]
-  SC --> AUD["auditor subagents<br/>no edit tools, in parallel"]
+  SC --> AUD["auditor subagents<br/>no file-editing tools, in parallel"]
   SC --> CONV["converter subagents<br/>own worktree each"]
   CONV --> REV["auditor in diff-review mode"]
   AUD --> RA["statecraft-audit<br/>rubric"]
@@ -124,40 +154,38 @@ flowchart LR
 | [`skills/statecraft`](skills/statecraft/SKILL.md) | The orchestrator. Gathers your conventions, picks the mode and scope, shards the codebase, merges and verifies findings, runs the converters, then reviews their branches and lands them. |
 | [`skills/statecraft-audit`](skills/statecraft-audit/SKILL.md) | The audit rubric: where implicit state hides, what is and isn't a finding, reachability with serialisation and deployment checks, severity, and an output shape with a stable key and a coverage line. |
 | [`skills/statecraft-convert`](skills/statecraft-convert/SKILL.md) | The conversion rubric: characterization tests first, idioms per language version, one owner for transitions, today's outcomes kept, new behaviour only for listed bugs, expand-phase migrations, stable contracts, safe test targets, and the gate. |
-| [`agents/statecraft-auditor-subagent`](agents/statecraft-auditor-subagent.md) | Audits a diff, a shard, or a converter's branch. It has no edit tools. |
+| [`agents/statecraft-auditor-subagent`](agents/statecraft-auditor-subagent.md) | Audits a diff, a shard, or a converter's branch. It has no file-editing tools; it keeps Bash for reading, and for reproductions and test runs in temporary copies. |
 | [`agents/statecraft-converter-subagent`](agents/statecraft-converter-subagent.md) | Runs in its own worktree (`isolation: worktree`), resets it to the base commit, converts, runs the gate, and commits on its branch. |
 | [`skills/statecraft/scripts/candidates.py`](skills/statecraft/scripts/candidates.py) | A heuristic that ranks files by their densest cluster of lifecycle signals and lists status values compared in many files. |
 
 ## A real run
 
 <p align="center">
-  <img src="assets/session.webp" alt="Terminal replay: statecraft fix this branch. The auditor finds the exports lifecycle in 7 columns with 4 reachable bugs. A statecraft/ branch is created. The converter's worktree started on origin/main and is reset to the base commit; it commits characterization tests that pass on the base, then the explicit state machine with 8 bug tests that fail on the base. An independent diff-review finds a rollout gap; the converter fixes it in a third commit. Three commits land with 44 tests passing, the worktree is removed, nothing is pushed." width="100%">
+  <img src="assets/session.webp" alt="Terminal replay of a real v0.3 fix-mode run: the request accepts the visible changes the bug fixes need; the auditor finds the exports lifecycle with 3 bugs to fix; 6 caller-visible changes are listed and accepted; an integration worktree is created; the converter resets its worktree to the base commit, commits characterization tests that pass on the base, then the explicit state machine whose bug tests fail on the base by assertion. Meanwhile the user edits a file in their checkout. The independent diff-review runs 1,206 fault scenarios against base and branch and finds that a database error in the last write changes run_once's outcome; the converter fixes it and the fix is re-reviewed. Three commits land on statecraft-20261116-1231 with 45 tests passing; the user's checkout is untouched and their edit kept." width="100%">
 </p>
 
-<p align="center"><sub>A replay of a real fix-mode run (v0.2) on <a href="examples/export-service">the example service</a>, with the waits cut. The run took 11 minutes and cost $4.51. The test suite went from 1 test to 44.</sub></p>
+<p align="center"><sub>A replay of a real fix-mode run (v0.3) on <a href="examples/export-service">the example service</a>, with the waits cut. It took 15 minutes and cost $7.30; the test suite went from 1 test to 45.</sub></p>
 
-Three things in that run are the reason fix mode works the way it does:
+What that run shows:
 
-- **The converter's worktree started on the wrong commit.** Claude Code created it from `origin/main`, which doesn't
-  contain the worker being fixed. The converter's preflight noticed and reset it to the base commit before touching
-  anything.
+- **Approval came first.** The request accepted "the visible changes the bug fixes need", and the orchestrator held the
+  converter to exactly the six it listed. Where a bug fix had a choice it didn't need to make (show `"failed"` or
+  `"queued"` between retries), it kept today's value and asked.
+- **Your checkout was left alone while you worked.** Four minutes in, a file in the checkout was edited, as if by the
+  user. Landing and gating happened in the integration worktree, so the edit survived. At the end the orchestrator
+  saw the uncommitted edit and held back the merge until it is committed.
+- **The converter started from the right commit.** It reset its worktree to the base commit before touching anything.
+  Claude Code creates agent worktrees from the remote default branch, which here doesn't contain the code being fixed.
 - **Behaviour was pinned before the rewrite.** The first commit adds characterization tests that pass on the old
-  code. They were never changed afterwards. Each of the 8 bug tests was shown to fail on the old code.
-- **The independent review caught a real problem.** The auditor, in `diff-review` mode, found that a worker running
-  between the two migration steps could rebuild and re-email finished exports. The orchestrator sent the converter
-  back, and the third commit made the upgrade a single atomic step.
+  code and were never changed afterwards. Every bug test fails on the old code by assertion.
+- **The independent review earned its place.** The `diff-review` auditor ran 1,206 fault scenarios against base and
+  branch. It found that a database error in the final write changed what `run_once` does. The converter fixed it in a
+  third commit, and the fix was reviewed again.
 
-The result landed on `statecraft/20261116-1116`; `feature/export-worker` was never touched. It ended with six
-decisions for a person, among them:
-
-- retried failures now show `"queued"` instead of `"failed"`
-- old workers must be stopped before running `db.upgrade`
-- the 10-minute claim must be longer than the slowest build
-- exports already hit by the bugs keep their current status unless you repair them
-
-A sweep of the same repository, which is report-only, took 1 minute and cost $0.45. It found the same lifecycle,
-reproduced its bugs in memory, and treated the double-claim race as a question about how many workers you run rather
-than a confirmed high-severity bug.
+Two other runs of the same example stopped where they should. Fix mode without approval stopped after the plan, with
+no branch, worktree or commit. Diff mode reported only. On a real codebase, a four-shard sweep of part of Spark ran
+its auditors in parallel, merged 33 findings, re-read every high one, and said plainly which large files it had not
+read.
 
 ## Try it in a minute
 
@@ -182,28 +210,32 @@ python3 -I skills/statecraft/scripts/candidates.py path/to/repo --paths services
 
 ```text
 $ python3 -I candidates.py kubernetes --top 2
-# scanned 7920 source files; 465 with lifecycle signals
+# scanned 7774 source files; 444 with lifecycle signals
 # skipped: 4687 test, 4472 vendored or tool directory, 1393 generated (name), 5 top-level build/, 5 generated (header)
-  12  pkg/kubelet/pod_workers.go  (hotspot lines 413-442 of 1783)
+# not source (not scanned): 13414 files (.yaml 6535, (none) 3003, .json 1237, .pb 988, .md 599, .sh 296)
+  12  pkg/kubelet/pod_workers.go  (hotspot lines 413-442 of 1782)
       identifiers: deleted bool:413, finished bool:421, IsFinished:439, IsDeleted:441, IsStarted:442, syncedAt:384, ...
-   8  pkg/printers/internalversion/printers.go  (hotspot lines 1312-1324 of 3827)
-      identifiers: status string:1312, FinishedAt:1004, hasRunning:1052, Running:1078, failed bool:2360, isFailed:3370
+   8  pkg/printers/internalversion/printers.go  (hotspot lines 1312-1324 of 3826)
+      identifiers: status string:1312, FinishedAt:1004, hasRunning:1052, Running:1078, failed bool:2360, ...
       status values: status=complete:1314, status=failed:1316, status=terminating:1318, status=suspended:1320, ...
 ```
 
 A file's score is its densest 40-line cluster of lifecycle signals:
 - flags such as `isLoading`
 - timestamps used as states, such as `StartedAt`
-- boolean fields named after a lifecycle, such as `Paid bool`
+- boolean fields named after a lifecycle (`Paid bool`, `is_paid BOOLEAN`, `models.BooleanField`, `t.boolean :paid`)
 - status fields stored as plain ints or strings
+- `useState` loading/error/data clusters
 - status values compared or assigned as literals
 
-It doesn't count enum members, constants, union types, JSX attributes, HTTP codes, or words inside strings and
-comments. These are all things explicit machines look like.
+Each file is lexed first, so comments are ignored and words inside strings don't count, except column names in SQL
+strings. Things that look like explicit machines aren't scored: enum members, constants, union and interface types,
+switch arms. Neither are JSX attributes or HTTP codes.
 
-The output starts with a summary of what was skipped and why. On an 8–10-core Mac it takes about 3 seconds on
-Kubernetes, 6 on VS Code and 20 on LLVM. It ranks by names, so it points the auditors at places to look; it does not
-decide what counts as a finding.
+The output starts with what was skipped and why, including file types it doesn't read. On a 16-core Mac it takes
+about 3 seconds on Kubernetes, 8 on VS Code and 21 on LLVM. It ranks by names, so it misses clusters with unusual
+names, can't tell a well-owned status column from a scattered one, and doesn't decide what counts as a finding. It
+points the auditors at places to look.
 
 ## Project conventions win
 

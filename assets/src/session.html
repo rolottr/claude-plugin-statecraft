@@ -27,36 +27,37 @@
 </div>
 <script src="common.js"></script>
 <script>
-const DURATION = 25000;
-const PROMPT = 'statecraft: fix this branch';
+const DURATION = 27000;
+const PROMPT = 'statecraft: fix this branch. I accept the visible changes the bug fixes need.';
 // [html, appear-at ms, kind, until]; 'spin' lines disappear at `until`, when the next line replaces them.
 const D = '<span class="dim">  ⎿  </span>';
 const lines = [
   ['<span class="p"><b>&gt;</b> <span id="prompt"></span></span>', 0, 'prompt'],
-  ['', 1700],
-  ['<span class="dotp">⏺</span> Skill(<span class="k">statecraft:statecraft</span>)', 1800],
-  [D + '<span class="dim">tree clean · gate: python3 -m unittest · export_status is public</span>', 2300],
-  ['<span class="dotp">⏺</span> <b>statecraft-auditor-subagent</b> <span class="dim">Audit export-worker diff</span>', 3000],
-  ['<span class="spin">  ✻ Reproducing failure, crash and race paths…</span>', 3400, 'spin', 5000],
-  [D + '1 machine · <span class="warn">exports lifecycle in 7 columns</span> · <span class="bad">4 reachable bugs</span>', 5000],
-  ['<span class="dotp">⏺</span> git switch -c <span class="k">statecraft/20261116-1116</span> <span class="dim">your branch stays untouched</span>', 5900],
-  ['<span class="dotp">⏺</span> <b>statecraft-converter-subagent</b> <span class="dim">Convert exports lifecycle · own worktree</span>', 6700],
-  [D + 'worktree started on origin/main <span class="dim">→</span> reset to base <span class="k">4c80207</span>', 7300],
-  ['<span class="spin">  ✻ Pinning today\'s behaviour, then converting…</span>', 7900, 'spin', 9600],
-  [D + '<span class="k">a040485</span> characterization tests <span class="dim">·</span> <span class="ok">pass on base</span>', 9600],
-  [D + '<span class="k">6ad0aaa</span> explicit state machine <span class="dim">·</span> 8 bug tests <span class="bad">fail on base</span>, <span class="ok">pass now</span>', 10300],
-  ['<span class="dotp">⏺</span> <b>statecraft-auditor-subagent</b> <span class="dim">Review the conversion · diff-review</span>', 11200],
-  ['<span class="spin">  ✻ Reviewing against the convert rules…</span>', 11600, 'spin', 13000],
-  [D + '<span class="bad">✗</span> rollout gap: a worker between the two upgrade steps could re-email', 13000],
-  ['<span class="dotp">⏺</span> SendMessage <span class="dim">→ converter</span>', 13900],
-  [D + '<span class="k">acb06c4</span> one atomic db.upgrade() · guarded claim', 14600],
-  ['<span class="dot">⏺</span> Landed 3 commits · <span class="ok">44 tests OK</span> · worktree removed · nothing pushed', 15600],
-  ['', 15900],
-  ['  <span class="hd">Fixed</span>  retries never ran · mail error marked "failed" · stuck after a crash', 16200],
-  ['         two workers could take one export', 16700],
-  ['  <span class="hd">Kept</span>   export_status response shape · old columns still written', 17400],
-  ['  <span class="hd">Asks</span>   6 decisions: retried failures now show "queued", rollout order…', 18100],
-];$('#log').innerHTML = lines.map(([h]) => `<span class="ln">${h}</span>`).join('');
+  ['', 3600],
+  ['<span class="dotp">⏺</span> Skill(<span class="k">statecraft:statecraft</span>)', 3700],
+  [D + '<span class="dim">tree clean · gate passes on 5ace530 · .claude/worktrees/ excluded</span>', 4200],
+  ['<span class="dotp">⏺</span> <b>statecraft-auditor-subagent</b> <span class="dim">Audit export-worker diff</span>', 4900],
+  [D + '1 machine · <span class="warn">exports lifecycle in 7 columns</span> · <span class="bad">3 bugs to fix</span>', 5800],
+  ['<span class="dotp">⏺</span> Approval: <b>6 changes callers will see</b> <span class="dim">· accepted in your request</span>', 6600],
+  ['<span class="dotp">⏺</span> git worktree add <span class="k">.claude/worktrees/statecraft-20261116-1231</span>', 7400],
+  ['<span class="dotp">⏺</span> <b>statecraft-converter-subagent</b> <span class="dim">Convert exports lifecycle · own worktree</span>', 8200],
+  [D + 'reset its worktree to base <span class="k">5ace530</span>', 8700],
+  ['<span class="spin">  ✻ Pinning today\'s behaviour, then converting…</span>', 9200, 'spin', 10800],
+  [D + '<span class="k">4d80cb7</span> characterization tests <span class="dim">·</span> <span class="ok">pass on base</span>', 10800],
+  [D + '<span class="k">51c2440</span> explicit state machine <span class="dim">·</span> bug tests <span class="bad">fail on base</span> by assertion', 11400],
+  ['  <span class="warn">✎ meanwhile you edit app/storage.py in your checkout</span>', 12200],
+  ['<span class="dotp">⏺</span> <b>statecraft-auditor-subagent</b> <span class="dim">diff-review · 1,206 fault scenarios, base vs branch</span>', 13000],
+  [D + '<span class="bad">✗</span> a database error in the last write changes run_once\'s outcome', 14200],
+  ['<span class="dotp">⏺</span> SendMessage <span class="dim">→ converter</span>', 15000],
+  [D + '<span class="k">c8c0e5c</span> keep run_once\'s outcome · re-reviewed <span class="ok">✓</span>', 15700],
+  ['<span class="dot">⏺</span> Landed 3 commits on <span class="k">statecraft-20261116-1231</span> · <span class="ok">45 tests OK</span>', 16700],
+  [D + 'worktrees removed · nothing pushed', 17200],
+  ['', 17500],
+  ['  <span class="hd">Your checkout</span>  untouched, your edit kept · merge offered once you commit it', 17900],
+  ['  <span class="hd">Fixed</span>          retries never ran · mail error marked "failed" · double claim', 18600],
+  ['  <span class="hd">Asks</span>           failed vs queued between retries · rollout order · old stuck rows', 19300],
+];
+$('#log').innerHTML = lines.map(([h]) => `<span class="ln">${h}</span>`).join('');
 
 function render(t) {
   const els = $$('#log .ln');
@@ -71,8 +72,8 @@ function render(t) {
     }
   });
   const p = $('#prompt');
-  const done = typed(p, PROMPT, t, 200, 22);
-  p.innerHTML = p.textContent + (t < 1700 && Math.floor(t / 450) % 2 === 0 ? '<span style="background:#e6edf3">&nbsp;</span>' : '');
+  const done = typed(p, PROMPT, t, 200, 26);
+  p.innerHTML = p.textContent + (t < 3600 && Math.floor(t / 450) % 2 === 0 ? '<span style="background:#e6edf3">&nbsp;</span>' : '');
 }
 </script>
 </body>

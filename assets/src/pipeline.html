@@ -49,7 +49,7 @@
   <div class="arrow" id="a1" style="left:326px;">→</div>
   <div class="card stage" id="k2" style="left:350px;"><h3>2 · audit in parallel</h3>
     <div class="rows" id="audrows"></div>
-    <div class="foot">Read-only subagents, one module each. Every invalid state traced to a real path.</div>
+    <div class="foot">Auditors without edit tools, one module each. Every invalid state traced to a real path.</div>
   </div>
   <div class="arrow" id="a2" style="left:628px;">→</div>
   <div class="card stage" id="k3" style="left:652px;"><h3>3 · catalogue</h3>
@@ -71,8 +71,8 @@
   <div class="caption" id="c1"><em>sweep</em>: a quick scan ranks the files most likely to hide a lifecycle.</div>
   <div class="caption" id="c2">Read-only auditors take one module each, in parallel, and trace every path.</div>
   <div class="caption" id="c3">Findings are merged, the high ones re-checked, and ranked by user impact.</div>
-  <div class="caption" id="c4"><em>fix</em>: converters in their own worktrees pin today's behaviour with tests, then convert.</div>
-  <div class="caption" id="c5">Landed one at a time on a new branch, gate green after each. Your branch is untouched.</div>
+  <div class="caption" id="c4"><em>fix</em>: you approve every change callers will see; converters pin today's behaviour, then convert.</div>
+  <div class="caption" id="c5">Landed one at a time on a new branch in its own worktree. Your checkout is never touched.</div>
   <div class="caption" id="c6"><em>diff</em>: the same auditor on just your branch, before you push.</div>
 </div>
 <script src="common.js"></script>
