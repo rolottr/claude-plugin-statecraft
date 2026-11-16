@@ -27,35 +27,36 @@
 </div>
 <script src="common.js"></script>
 <script>
-const DURATION = 21000;
+const DURATION = 25000;
 const PROMPT = 'statecraft: fix this branch';
-// [html, appear-at ms, kind]; kind 'spin' lines are replaced by the next line when it appears.
+// [html, appear-at ms, kind, until]; 'spin' lines disappear at `until`, when the next line replaces them.
+const D = '<span class="dim">  ⎿  </span>';
 const lines = [
   ['<span class="p"><b>&gt;</b> <span id="prompt"></span></span>', 0, 'prompt'],
   ['', 1700],
   ['<span class="dotp">⏺</span> Skill(<span class="k">statecraft:statecraft</span>)', 1800],
-  ['<span class="dim">  ⎿  reads AGENTS.md · gate: python3 -m unittest · export_status is public</span>', 2300],
-  ['<span class="dotp">⏺</span> <b>statecraft-auditor-subagent</b> <span class="dim">Audit diff for implicit state</span>', 3000],
-  ['<span class="spin">  ✻ Tracing failure paths in an in-memory DB…</span>', 3500, 'spin', 5200],
-  ['<span class="dim">  ⎿  </span>1 machine · <span class="warn">exports lifecycle in 7 columns</span> · <span class="bad">3 reachable bugs</span>', 5200],
-  ['<span class="dotp">⏺</span> <b>statecraft-converter-subagent</b> <span class="dim">Convert exports lifecycle · worktree</span>', 6200],
-  ['<span class="spin">  ✻ Converting, then running the gate…</span>', 6700, 'spin', 9000],
-  ['<span class="dim">  ⎿  </span><span class="k">335c97d</span> Make exports lifecycle an explicit state machine', 9000],
-  ['<span class="dim">  ⎿  </span><span class="k">0d58576</span> Atomic claim, expiring lease and tracked notification', 9500],
-  ['<span class="dim">  ⎿  </span>Ran 22 tests · <span class="ok">OK</span>', 10000],
-  ['<span class="dot">⏺</span> Merged into feature/export-worker. Gate green. Nothing pushed.', 11000],
-  ['', 11300],
-  ['  <span class="hd">Fixed</span>', 11500],
-  ['  <span class="bad">✗</span>→<span class="ok">✓</span> failed exports were never retried (MAX_ATTEMPTS was dead code)', 11900],
-  ['  <span class="bad">✗</span>→<span class="ok">✓</span> a mail error after a successful build reported "failed"', 12500],
-  ['  <span class="bad">✗</span>→<span class="ok">✓</span> two workers could claim one export; a crash left it "processing"', 13100],
-  ['', 13400],
-  ['  <span class="hd">Model</span>  state: queued · processing · retry_wait · done · failed', 13700],
-  ['         one writer (app/exports.py) · guarded UPDATEs · lease 600 s', 14200],
-  ['  <span class="hd">Kept</span>   export_status response shape', 14800],
-  ['  <span class="hd">Asks</span>   7 notes for you (retry label, migration, lease length, backoff…)', 15400],
-];
-$('#log').innerHTML = lines.map(([h]) => `<span class="ln">${h}</span>`).join('');
+  [D + '<span class="dim">tree clean · gate: python3 -m unittest · export_status is public</span>', 2300],
+  ['<span class="dotp">⏺</span> <b>statecraft-auditor-subagent</b> <span class="dim">Audit export-worker diff</span>', 3000],
+  ['<span class="spin">  ✻ Reproducing failure, crash and race paths…</span>', 3400, 'spin', 5000],
+  [D + '1 machine · <span class="warn">exports lifecycle in 7 columns</span> · <span class="bad">4 reachable bugs</span>', 5000],
+  ['<span class="dotp">⏺</span> git switch -c <span class="k">statecraft/20261116-1116</span> <span class="dim">your branch stays untouched</span>', 5900],
+  ['<span class="dotp">⏺</span> <b>statecraft-converter-subagent</b> <span class="dim">Convert exports lifecycle · own worktree</span>', 6700],
+  [D + 'worktree started on origin/main <span class="dim">→</span> reset to base <span class="k">4c80207</span>', 7300],
+  ['<span class="spin">  ✻ Pinning today\'s behaviour, then converting…</span>', 7900, 'spin', 9600],
+  [D + '<span class="k">a040485</span> characterization tests <span class="dim">·</span> <span class="ok">pass on base</span>', 9600],
+  [D + '<span class="k">6ad0aaa</span> explicit state machine <span class="dim">·</span> 8 bug tests <span class="bad">fail on base</span>, <span class="ok">pass now</span>', 10300],
+  ['<span class="dotp">⏺</span> <b>statecraft-auditor-subagent</b> <span class="dim">Review the conversion · diff-review</span>', 11200],
+  ['<span class="spin">  ✻ Reviewing against the convert rules…</span>', 11600, 'spin', 13000],
+  [D + '<span class="bad">✗</span> rollout gap: a worker between the two upgrade steps could re-email', 13000],
+  ['<span class="dotp">⏺</span> SendMessage <span class="dim">→ converter</span>', 13900],
+  [D + '<span class="k">acb06c4</span> one atomic db.upgrade() · guarded claim', 14600],
+  ['<span class="dot">⏺</span> Landed 3 commits · <span class="ok">44 tests OK</span> · worktree removed · nothing pushed', 15600],
+  ['', 15900],
+  ['  <span class="hd">Fixed</span>  retries never ran · mail error marked "failed" · stuck after a crash', 16200],
+  ['         two workers could take one export', 16700],
+  ['  <span class="hd">Kept</span>   export_status response shape · old columns still written', 17400],
+  ['  <span class="hd">Asks</span>   6 decisions: retried failures now show "queued", rollout order…', 18100],
+];$('#log').innerHTML = lines.map(([h]) => `<span class="ln">${h}</span>`).join('');
 
 function render(t) {
   const els = $$('#log .ln');

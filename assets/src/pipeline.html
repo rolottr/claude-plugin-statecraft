@@ -54,25 +54,25 @@
   <div class="arrow" id="a2" style="left:628px;">→</div>
   <div class="card stage" id="k3" style="left:652px;"><h3>3 · catalogue</h3>
     <div class="rows" id="catrows"></div>
-    <div class="foot" id="catfoot">2 duplicates merged · highs re-checked</div>
+    <div class="foot" id="catfoot">merged by key · highs re-checked</div>
   </div>
   <div class="arrow" id="a3" style="left:930px;">→</div>
   <div class="card stage" id="k4" style="left:954px;"><h3>4 · convert</h3>
     <div class="rows" id="convrows"></div>
-    <div class="foot">One machine per worktree. The gate is your project's own.</div>
+    <div class="foot">Behaviour pinned by tests first, then your own gate and an independent review.</div>
   </div>
   <div id="diffnote">your branch's diff only</div>
 
   <div id="git">
-    <div class="glabel">your branch</div>
+    <div class="glabel">new branch</div>
     <div id="gitline"></div><div id="gitfill"></div>
   </div>
 
   <div class="caption" id="c1"><em>sweep</em>: a quick scan ranks the files most likely to hide a lifecycle.</div>
   <div class="caption" id="c2">Read-only auditors take one module each, in parallel, and trace every path.</div>
   <div class="caption" id="c3">Findings are merged, the high ones re-checked, and ranked by user impact.</div>
-  <div class="caption" id="c4"><em>fix</em>: one converter per machine, each in its own worktree, behind your quality gate.</div>
-  <div class="caption" id="c5">Merged one at a time, gate green after each. It never pushes, deploys or migrates.</div>
+  <div class="caption" id="c4"><em>fix</em>: converters in their own worktrees pin today's behaviour with tests, then convert.</div>
+  <div class="caption" id="c5">Landed one at a time on a new branch, gate green after each. Your branch is untouched.</div>
   <div class="caption" id="c6"><em>diff</em>: the same auditor on just your branch, before you push.</div>
 </div>
 <script src="common.js"></script>
@@ -92,10 +92,10 @@ const cat = [
 ];
 $('#catrows').innerHTML = cat.map(([s, o, w]) => `<div class="crow"><span class="chip ${s}">${s.toUpperCase()}</span><span>${o}</span><span class="what">${w}</span></div>`).join('');
 const conv = ['statecraft/payment', 'statecraft/export-job', 'statecraft/upload'];
-$('#convrows').innerHTML = conv.map((b) => `<div class="wt"><span style="color:var(--muted)">worktree</span> ${b.split('/')[1]}<div class="gate"><span>build ·</span><span>tests ·</span><span>lint ·</span></div></div>`).join('');
+$('#convrows').innerHTML = conv.map((b) => `<div class="wt"><span style="color:var(--muted)">worktree</span> ${b.split('/')[1]}<div class="gate"><span>pinned ·</span><span>gate ·</span><span>review ·</span></div></div>`).join('');
 const merges = [0.18, 0.5, 0.82].map((x, i) => {
   const d = document.createElement('div'); d.className = 'merge'; d.style.left = `calc(110px + (100% - 110px) * ${x} - 9px)`;
-  const l = document.createElement('div'); l.className = 'mlabel'; l.style.left = `calc(110px + (100% - 110px) * ${x})`; l.textContent = `merge ${conv[i].split('/')[1]} · gate ✓`;
+  const l = document.createElement('div'); l.className = 'mlabel'; l.style.left = `calc(110px + (100% - 110px) * ${x})`; l.textContent = `land ${conv[i].split('/')[1]} · gate ✓`;
   $('#git').append(d, l); return [d, l];
 });
 
@@ -138,7 +138,7 @@ function render(t) {
     vis(el, t, 10000 + r * 280, Infinity, 300, 8);
     el.querySelectorAll('.gate span').forEach((s, j) => {
       const at = 10700 + r * 900 + j * 300;
-      const label = ['build', 'tests', 'lint'][j];
+      const label = ['pinned', 'gate', 'review'][j];
       if (r === 1 && j === 1 && t >= at && t < at + 1300) { s.innerHTML = `${label} <b class="bad">✗</b> <span style="color:var(--amber)">fixing</span>`; return; }
       const done = t >= at + (r === 1 && j >= 1 ? 1300 : 0);
       s.innerHTML = done ? `${label} <b class="ok">✓</b>` : `${label} ·`;

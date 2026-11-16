@@ -1,26 +1,28 @@
 ---
 name: statecraft-audit
-description: Rubric for finding implicit state machines - lifecycles held in clusters of booleans, nullable fields, timestamps, status strings or counters - in any language or layer (services, workers, databases, clients, apps). Use for a state machine audit, lifecycle audit, "find implicit state", flag-cluster review, or a diff review for new ad-hoc state.
+description: Rubric that statecraft auditor subagents load for finding implicit state machines (lifecycles held in clusters of booleans, nullable fields, timestamps, status strings or counters) in any language or layer. For a user's request to audit or fix state, use the statecraft skill instead, which runs this rubric in subagents.
 ---
 
 # Statecraft audit
 
-Find every place where something has a lifecycle (it loads, runs, waits, retries, fails, completes, expires) but
-that lifecycle is not modelled as one explicit state. Instead it is spread across several fields, flags or variables,
-so combinations that make no sense can be represented, and transitions are scattered across the code.
+Find every place in your scope where something has a lifecycle (it loads, runs, waits, retries, fails, completes,
+expires) but that lifecycle is not modelled as one explicit state. Instead it is spread across several fields, flags
+or variables, so combinations that make no sense can be represented, and transitions are scattered across the code.
 
 This rubric is language- and layer-agnostic. Backends are the main target: services, workers, queues, databases,
 integrations. The same rules apply to CLIs, desktop and mobile apps, and web clients.
 
+**Cover your whole scope, and report every machine that meets the bar below and nothing that doesn't.** The bar is
+the reachability analysis, not your confidence.
+
 ## Before you start
 
-1. Read the project's own conventions: `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, ADRs, architecture docs. If the
-   project already states a rule for state or lifecycles, that rule wins over this rubric where they differ.
-2. Find the explicit state machines the codebase already has (enums or unions named `State`, `Status`, `Phase`;
-   `match`/`switch` over them; workflow or FSM libraries; DB enum types). They are the house pattern: proposals reuse
-   their shape and helpers instead of inventing a new one.
-3. Know the boundaries: what is persisted, what is a public contract (HTTP/gRPC/GraphQL schemas, events, queues,
-   shared tables, SDK types), what is internal.
+1. The conventions brief in your prompt is authoritative. Read `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and
+   architecture docs yourself only for what it does not answer. A project rule for state wins over this rubric.
+2. Know the house pattern: the explicit state machines the codebase already has. Proposals reuse their shape.
+3. Know the boundaries: what is persisted, and what is a contract (HTTP/gRPC/GraphQL schemas, events, queues, SDK
+   types). Treat persisted tables as shared contracts unless the brief says they are private: other services,
+   analytics queries and exports may read them.
 
 ## Where implicit state machines hide
 
@@ -61,28 +63,30 @@ integrations. The same rules apply to CLIs, desktop and mobile apps, and web cli
 
 - Two or more fields whose meaningful combinations are fewer than all their combinations.
 - Code reads a combination (`if done && !error`, `status == "x" && retries < 3`) rather than one value.
-- The same "what state is it in" question is answered in several places, sometimes differently.
+- The same "what state is it in" question is answered in several places, and the answers can differ.
 - Comments such as "should never happen", "can't be both", "just in case", defensive null checks for fields that
   "must" be set at this point, force-unwraps or casts justified by a lifecycle assumption.
 - A transition written as several separate assignments or several separate writes (not atomic).
 - Polling, sleeps or retries used to wait for something to reach a state.
-- Status literals repeated across files instead of one type.
 
 ## Not findings
 
 - A single independent boolean (a preference, a feature toggle, a capability).
 - Orthogonal flags whose combinations are all valid (`selected` and `dirty`): that is a product of independent
   states, not a machine. Report it only when a combination is in fact invalid or a flow branches on the pair.
-- Lifecycles owned by a framework or library that the code does not duplicate.
-- Already-explicit machines, unless the change bypasses them (writes the status directly, adds a flag beside them,
+- Lifecycles owned by a framework or library that the code only reads: an informer's `HasSynced`, a query library's
+  `isLoading`, a promise's `status`, an HTTP client's connection state. Report only when the code duplicates them.
+- Already-explicit machines, unless the code bypasses them (writes the status directly, adds a flag beside them,
   handles a case outside the transition function).
+- Generated or vendored code.
 
 ## Required analysis for every candidate
 
 Do this research before reporting. Never report with unfinished research: if the other half of the flow (the
 worker, the consumer, the client, the migration) is in the repository, read it.
 
-1. **Owner and encoding.** Which type, table, module or service owns the lifecycle, and which fields encode it.
+1. **Owner, key and encoding.** Which type, table, module or service owns the lifecycle; a stable `Key` for it (the
+   table name, or the fully qualified type or module path); and the fields that encode it.
 2. **Real states.** Name the states as the domain would (`queued`, `running(attempt)`, `failed(error)`,
    `completed(result)`), with the data each state needs and only that data.
 3. **Transitions.** Each trigger, guard and side effect, with file:line. Include failure, cancellation, timeout,
@@ -91,6 +95,15 @@ worker, the consumer, the client, the migration) is in the repository, read it.
    the concrete path that reaches it, or say that none exists today. Consider: two concurrent requests, two workers or
    instances, retries and redelivery, a crash between two writes, out-of-order messages or webhooks, a completion
    arriving after a newer request started (stale completion), a request made while busy then the busy work failing.
+   - **Name what serialises the path, and check it**: transaction boundaries (including framework-level ones such as
+     per-request transactions or `@Transactional`), row locks (`SELECT … FOR UPDATE`), unique constraints, advisory
+     locks, single-threaded actors, queue concurrency settings. A "crash between two writes" inside one transaction is
+     not a path.
+   - **State the deployment assumption** a path needs (more than one instance, more than one worker, concurrent
+     requests per user) and where you established it (config, code, docs). If you could not establish it from the
+     repository, say "assumed" and cap the finding at medium.
+   - **Reproduce when it is cheap**: an in-memory run or a scratch script in a temporary directory (`mktemp -d`),
+     never inside the repository.
 5. **Impact on all three experiences.**
    - UX: what a user or API caller sees (stuck spinner, lost request, double charge, duplicate email, wrong status,
      job never retried, error never shown).
@@ -98,27 +111,35 @@ worker, the consumer, the client, the migration) is in the repository, read it.
      only appear under concurrency).
    - AX: what it costs coding agents (state not greppable, no exhaustive switch to force handling a new case,
      invariants that live only in people's heads).
-6. **Proposed explicit model**, sketched in the project's language and house pattern. State the boundary impact:
-   persisted schema and migration needed? public contract affected (and how to keep it stable)? events or consumers
-   affected?
+6. **Proposed explicit model**, sketched in the project's language and house pattern, using only features of the
+   project's language version. State the boundary impact: persisted schema and migration needed? contract affected
+   (and how to keep it stable)? events or consumers affected?
 
 ## Severity
 
 Calibrate honestly. Over-reporting makes people stop listening.
 
-- **High**: an invalid state is reachable on a realistic path and causes data loss or corruption, a duplicated side
-  effect (charge, email, provisioning), stuck or lost work, a lost request, a skippable security or verification
-  step, or a wrong answer returned to callers.
+- **High**: an invalid state is reachable on a realistic path, with its serialising mechanisms checked and its
+  deployment assumption established, and it causes data loss or corruption, a duplicated side effect (charge, email,
+  provisioning), stuck or lost work, a lost request, a skippable security or verification step, or a wrong answer
+  returned to callers.
 - **Medium**: an invalid state is reachable but recoverable or merely visible (stale status, spinner, retry needed);
-  or the transitions are scattered across three or more places with no single owner, so the next change is likely to
-  break it.
-- **Low**: invalid combinations are representable but no path reaches them today; structural improvement only.
+  or a high whose deployment assumption is only assumed; or two places compute the state and can disagree.
+- **Low**: invalid combinations are representable but no path reaches them today; or the state is scattered across
+  several places that agree. Structural improvement only.
 
-## Diff mode
+## Modes
 
-When given a diff, report only machines that the diff creates, extends (a new flag, a new nullable field, a new
-status literal, a new transition outside the owner), or breaks (bypasses an existing explicit machine). Do not report
-untouched code, except to explain a finding in the diff.
+- **diff**: report only machines the diff creates, extends (a new flag, a new nullable field, a new status literal, a
+  new transition outside the owner) or breaks (bypasses an existing explicit machine). Mention untouched code only to
+  explain a finding in the diff.
+- **sweep**: cover the whole shard. The candidate list is a starting point, not the boundary, and it can miss things
+  (it ranks by names). Follow a machine outside your shard when its transitions go there, and list every path.
+- **diff-review**: the diff is a statecraft conversion. Check it against the `statecraft-convert` rules and report
+  each violation as a finding: characterization tests missing, changed after the first commit, or not covering a
+  touched transition; a bug test that would pass on the base commit; in-memory flags left writable; persisted old
+  columns no longer written; transitions outside the owner; a contract change (shape, values, errors); new behaviour
+  that fixes no listed bug; a new implicit machine. Also report any finding the conversion missed.
 
 ## Output
 
@@ -126,17 +147,25 @@ Report findings most severe first, each in exactly this shape so an orchestrator
 
 ```
 ### <short id>. <Owner> - <one-line summary>
+- Key: table name, or fully qualified type / module path
 - Severity: high | medium | low
 - Location: path:line (main), other paths:lines
 - Encoded by: the fields, columns or variables that hold the state
 - States: the real states and the data each carries
 - Transitions: trigger: from -> to (path:line), one per line, failure and busy paths included
 - Invalid and reachable: combination - the concrete path that reaches it (or "none today")
+- Serialised by / assumes: what was checked, and the deployment assumption with its source or "assumed"
+- Verified: reproduced (how) | traced (files) | assumed (what)
 - Impact: UX ... / DX ... / AX ...
 - Proposed model: sketch in the project's idiom, reusing the house pattern
-- Boundary impact: persistence / public contract / events, and how to keep them compatible
+- Boundary impact: persistence / contracts / events, and how to keep them compatible
 - Tests to add: the transitions and failure paths a conversion must prove
 ```
 
-End with a one-paragraph summary: how many machines, how many with reachable invalid states, and the order you would
-convert them in (highest user impact and lowest boundary risk first).
+End with:
+
+```
+Coverage: read: <paths>; skimmed: <paths>; not read: <paths and why>
+Summary: how many machines, how many with reachable invalid states, and the order to convert them in (highest user
+impact and lowest boundary risk first).
+```

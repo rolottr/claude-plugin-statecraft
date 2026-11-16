@@ -25,9 +25,9 @@ see this as:
 - a status that says "failed" for something that worked
 - a spinner that never stops
 
-Statecraft finds these **implicit state machines**, proves which invalid states can actually be reached, and converts
-them into one explicit state with a single owner for its transitions, tests for every path, and the same public
-contract as before.
+Statecraft finds these **implicit state machines** and traces a concrete path to each invalid state, checking what
+serialises it (transactions, locks, constraints). Then it converts them: first it pins today's behaviour with tests,
+then it puts one explicit state behind a single owner for its transitions, keeping the same public contract.
 
 ## What it looks for
 
@@ -39,8 +39,8 @@ contract as before.
 | Workflows across services | sagas and webhooks whose progress is inferred from which events arrived, or from `stripe_charge_id IS NOT NULL` |
 | Connections, auth, clients | connected/reconnecting flags, hand-rolled circuit breakers, MFA and invite flows, `useState` clusters |
 
-For each machine it names the real states, maps every transition (failures, timeouts, crashes and requests that
-arrive while busy included), and traces a concrete path to each invalid state before reporting it.
+It does not report lifecycles owned by a framework that your code only reads (an informer's `HasSynced`, a query
+library's `isLoading`), independent flags whose combinations are all valid, or generated code.
 
 ## Install
 
@@ -56,7 +56,7 @@ Or from a shell:
 claude plugin install statecraft --marketplace rolottr/claude-plugin-statecraft
 ```
 
-Requirements: Claude Code with plugin support, `git`, and `python3` for the candidate scan (standard library only).
+Requirements: Claude Code with plugin support, `git`, and Python 3.8+ for the candidate scan (standard library only).
 
 ## Use
 
@@ -64,14 +64,44 @@ Ask in your own words; Claude picks the mode.
 
 | You ask | Mode | What happens |
 | --- | --- | --- |
-| "statecraft this branch" | **diff** | One auditor reviews your branch's diff for new or extended implicit state, or for code that bypasses an existing explicit machine. Report only. Use it before you push. |
-| "find all the implicit state machines in this service" | **sweep** | A quick scan ranks files, read-only auditors cover one module each in parallel, and the findings are merged, re-checked and ranked. Report only, then it offers to convert. |
-| "statecraft and fix them" | **fix** | One converter per machine, each in its own git worktree, behind your project's quality gate. Branches are merged one at a time, with the gate run after each. |
+| "statecraft this branch" | **diff** | One auditor reviews your branch's diff for new or extended implicit state, or for code that bypasses an existing explicit machine. Afterwards it reads the PR discussion, if a PR exists. Report only. Use it before you push. |
+| "find all the implicit state machines in this service" | **sweep** | The repo is split into shards, a quick scan ranks each shard's files, and read-only auditors run in parallel. Findings are merged, the high ones re-checked, and the report says what was and wasn't read. Report only, then it offers to convert. |
+| "statecraft: fix this branch" | **fix** | Converts the findings in the scope you named: this branch's diff, or a sweep's. Converters run in their own worktrees (at most 3 at a time), and results land on a new `statecraft/<date>` branch. |
+
+### How fix mode keeps your code safe
+
+- **Starts clean.** It refuses to start with uncommitted changes, and checks that your gate passes first.
+- **Pins behaviour first.** Converters write tests of today's behaviour before changing anything, prove them on the
+  base commit, and commit them separately; they must still pass unchanged afterwards. Each fixed bug gets a test that
+  is shown to fail on the base commit.
+- **Adds new behaviour only to fix a bug.** Leases, cancellation, outboxes and new states visible to callers come in
+  only when they fix a bug the audit found. Anything else is listed as a proposal.
+- **Keeps contracts stable.** APIs, events, shared tables and SDK types keep their shape, values and errors. Changing
+  one is reported as a decision for you.
+- **Migrates in two releases.** This change adds and writes the new column while still writing the old ones, and
+  includes a backfill covering every old combination plus a read-only count query to run in production first.
+  Validating constraints and dropping the old columns is left to a later release that you run.
+- **Gets checked twice.** Every converter branch is reviewed by an independent auditor and by the orchestrator, then
+  lands on the new branch only if the gate passes. Your own branch is untouched until you say yes.
+- **Never** pushes, deploys, or connects to a database that isn't local.
+
+### Worktree setup for real projects
+
+Converters work in fresh git worktrees. A fresh worktree has no `node_modules`, `.venv` or `.env`. Converters run your
+documented install command, and you can make that faster or unnecessary with Claude Code's worktree settings:
+
+- `worktree.symlinkDirectories` (in Claude Code settings) symlinks large dependency directories from the main checkout
+  into each worktree, for example `node_modules` or `.venv`.
+- A `.worktreeinclude` file in the repository root lists untracked files to copy into each worktree, such as `.env`
+  files that point at your local database.
+
+Statecraft resets each converter's worktree to the commit it should start from, so it works with any
+`worktree.baseRef` setting.
 
 ## How it works
 
 <p align="center">
-  <img src="assets/pipeline.webp" alt="Four stages: a scan ranks files by lifecycle signals; auditors run in parallel per module and report high, medium and low findings; a catalogue merges and ranks them; converters work in separate worktrees with build, tests and lint checks, then merge into your branch. In diff mode only the auditor runs, on your branch's diff." width="100%">
+  <img src="assets/pipeline.webp" alt="Four stages: a scan ranks files by lifecycle signals; auditors run in parallel per module and report high, medium and low findings; a catalogue merges and ranks them; converters in separate worktrees pin behaviour with tests, pass the gate and an independent review, then land one at a time on a new branch. In diff mode only the auditor runs, on your branch's diff." width="100%">
 </p>
 
 Statecraft is built the way [Thermos](https://github.com/cursor/plugins/tree/main/thermos) is. The rubrics live in
@@ -79,44 +109,55 @@ skills, thin subagents load them, and an orchestrator runs the subagents in para
 
 ```mermaid
 flowchart LR
-  SC["statecraft<br/>(orchestrator skill)"] --> CAND["candidates.py<br/>scan"]
-  SC --> AUD["auditor subagents<br/>read-only, in parallel"]
-  SC --> CONV["converter subagents<br/>one worktree each"]
+  SC["statecraft<br/>(orchestrator skill)"] --> CAND["candidates.py<br/>scan per shard"]
+  SC --> AUD["auditor subagents<br/>no edit tools, in parallel"]
+  SC --> CONV["converter subagents<br/>own worktree each"]
+  CONV --> REV["auditor in diff-review mode"]
   AUD --> RA["statecraft-audit<br/>rubric"]
+  REV --> RA
   CONV --> RC["statecraft-convert<br/>rubric"]
   CONV --> GATE["your quality gate"]
 ```
 
 | Component | Role |
 | --- | --- |
-| [`skills/statecraft`](skills/statecraft/SKILL.md) | The orchestrator. Gathers your conventions, picks the mode, shards the codebase, merges and verifies findings, runs the converters and merges their branches. |
-| [`skills/statecraft-audit`](skills/statecraft-audit/SKILL.md) | The audit rubric: where implicit state hides, what is and isn't a finding, reachability analysis, severity, and a fixed output shape for merging. |
-| [`skills/statecraft-convert`](skills/statecraft-convert/SKILL.md) | The conversion rubric: idioms per language, one owner for transitions, a policy for requests made while busy, guards against stale completions, atomic persisted transitions, expand/contract migrations, stable contracts, tests and the gate. |
-| [`agents/statecraft-auditor-subagent`](agents/statecraft-auditor-subagent.md) | Audits a diff or one shard. Read-only. |
-| [`agents/statecraft-converter-subagent`](agents/statecraft-converter-subagent.md) | Converts the machines it is given, runs the gate, and commits on its own worktree branch. |
-| [`skills/statecraft/scripts/candidates.py`](skills/statecraft/scripts/candidates.py) | A heuristic that ranks files by lifecycle-like identifiers and lists status values compared across many files. |
+| [`skills/statecraft`](skills/statecraft/SKILL.md) | The orchestrator. Gathers your conventions, picks the mode and scope, shards the codebase, merges and verifies findings, runs the converters, then reviews their branches and lands them. |
+| [`skills/statecraft-audit`](skills/statecraft-audit/SKILL.md) | The audit rubric: where implicit state hides, what is and isn't a finding, reachability with serialisation and deployment checks, severity, and an output shape with a stable key and a coverage line. |
+| [`skills/statecraft-convert`](skills/statecraft-convert/SKILL.md) | The conversion rubric: characterization tests first, idioms per language version, one owner for transitions, today's outcomes kept, new behaviour only for listed bugs, expand-phase migrations, stable contracts, safe test targets, and the gate. |
+| [`agents/statecraft-auditor-subagent`](agents/statecraft-auditor-subagent.md) | Audits a diff, a shard, or a converter's branch. It has no edit tools. |
+| [`agents/statecraft-converter-subagent`](agents/statecraft-converter-subagent.md) | Runs in its own worktree (`isolation: worktree`), resets it to the base commit, converts, runs the gate, and commits on its branch. |
+| [`skills/statecraft/scripts/candidates.py`](skills/statecraft/scripts/candidates.py) | A heuristic that ranks files by their densest cluster of lifecycle signals and lists status values compared in many files. |
 
 ## A real run
 
 <p align="center">
-  <img src="assets/session.webp" alt="Terminal replay: statecraft fix this branch. The auditor finds one machine, the exports lifecycle in 7 columns with 3 reachable bugs; the converter commits two changes in a worktree; 22 tests pass; the branch is merged with the gate green and nothing pushed. Fixed: retries that never ran, a mail error reported as failed, two workers claiming one export." width="100%">
+  <img src="assets/session.webp" alt="Terminal replay: statecraft fix this branch. The auditor finds the exports lifecycle in 7 columns with 4 reachable bugs. A statecraft/ branch is created. The converter's worktree started on origin/main and is reset to the base commit; it commits characterization tests that pass on the base, then the explicit state machine with 8 bug tests that fail on the base. An independent diff-review finds a rollout gap; the converter fixes it in a third commit. Three commits land with 44 tests passing, the worktree is removed, nothing is pushed." width="100%">
 </p>
 
-<p align="center"><sub>A replay of a real fix-mode run on <a href="examples/export-service">the example service</a>, with the waits cut. The run took 8 minutes and cost $2.18. The test suite went from 1 test to 22.</sub></p>
+<p align="center"><sub>A replay of a real fix-mode run (v0.2) on <a href="examples/export-service">the example service</a>, with the waits cut. The run took 11 minutes and cost $4.51. The test suite went from 1 test to 44.</sub></p>
 
-What the converter produced:
+Three things in that run are the reason fix mode works the way it does:
 
-- **The state:** one `state` column (`queued`, `processing`, `retry_wait`, `done`, `failed`), with `CHECK`
-  constraints tying each state to the data it needs.
-- **Transitions:** all written in one module, each as a guarded `UPDATE … WHERE state = ?` whose affected row count
-  is checked.
-- **Claiming:** a worker takes a job with an atomic claim and a lease that expires, so a crashed worker's job is
-  picked up again.
-- **The email:** tracked separately, so a mailer error no longer turns a finished export into a failed one.
-- **The API:** `export_status` returns exactly the same shape as before.
+- **The converter's worktree started on the wrong commit.** Claude Code created it from `origin/main`, which doesn't
+  contain the worker being fixed. The converter's preflight noticed and reset it to the base commit before touching
+  anything.
+- **Behaviour was pinned before the rewrite.** The first commit adds characterization tests that pass on the old
+  code. They were never changed afterwards. Each of the 8 bug tests was shown to fail on the old code.
+- **The independent review caught a real problem.** The auditor, in `diff-review` mode, found that a worker running
+  between the two migration steps could rebuild and re-email finished exports. The orchestrator sent the converter
+  back, and the third commit made the upgrade a single atomic step.
 
-It ended with a list of decisions it would not make alone: what to show callers while a retry waits, how to migrate
-existing rows, how long the lease should be, and backoff.
+The result landed on `statecraft/20261116-1116`; `feature/export-worker` was never touched. It ended with six
+decisions for a person, among them:
+
+- retried failures now show `"queued"` instead of `"failed"`
+- old workers must be stopped before running `db.upgrade`
+- the 10-minute claim must be longer than the slowest build
+- exports already hit by the bugs keep their current status unless you repair them
+
+A sweep of the same repository, which is report-only, took 1 minute and cost $0.45. It found the same lifecycle,
+reproduced its bugs in memory, and treated the double-claim race as a question about how many workers you run rather
+than a confirmed high-severity bug.
 
 ## Try it in a minute
 
@@ -126,45 +167,49 @@ claude-plugin-statecraft/examples/export-service/make-repo.sh /tmp/export-servic
 cd /tmp/export-service && claude
 ```
 
-Then ask `statecraft this branch` for a report, or `statecraft: fix this branch` to watch it convert.
-
-## What it will and won't do
-
-- **It follows your project.** It reads `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and the explicit state types your
-  code already has, and copies their shape. Write your project's rule for lifecycles and your quality-gate command
-  there, and Statecraft will follow both.
-- **Behaviour is preserved, except the bugs.** Each bug it fixes is listed with the scenario that caused it. When it
-  can't tell a bug from intended behaviour, it keeps the behaviour and asks.
-- **Contracts stay stable.** APIs, events, shared tables and SDK types keep their shape; the old fields are derived
-  from the new state. Changing a contract is reported as a decision for you, never made silently.
-- **Persisted state is changed safely.** Schema changes use expand/contract migrations: add the new column, backfill
-  it with an explicit mapping of every old combination, and drop the old columns only in a later release.
-  Transitions become compare-and-set updates.
-- **Your gate stays green.** Converters run your build, tests and linters, and never weaken them to get a pass.
-- **It never pushes, deploys, or runs migrations against anything but a local or test database.** Audits are
-  read-only.
+This builds a small Python service with a local `origin` remote. On `main` it has an exports table; the
+`feature/export-worker` branch, which isn't pushed, adds a worker that keeps its lifecycle in flags and timestamps.
+Ask `statecraft this branch` for a report, or `statecraft: fix this branch` to watch it convert.
 
 ## Candidate scan
 
-The sweep starts from a quick heuristic you can also run on its own:
+A sweep starts from a quick scan that you can also run on its own:
 
 ```bash
 python3 -I skills/statecraft/scripts/candidates.py path/to/repo --top 40
+python3 -I skills/statecraft/scripts/candidates.py path/to/repo --paths services/billing --top 25
 ```
 
 ```text
-$ python3 -I candidates.py kubernetes/pkg/controller --top 3
-# 68 files with lifecycle signals; showing top 3
-   8  garbagecollector/graph_builder.go
-      identifiers: running:101, HasSynced:364, IsSynced:371, wasBlocked:662
-   8  statefulset/stateful_set_control.go
-      identifiers: isStale:440, isPending:456, pending:458, Running:477
-   6  cronjob/cronjob_controllerv2.go
-      identifiers: HasSynced:112, running:606, isFinished:716
+$ python3 -I candidates.py kubernetes --top 2
+# scanned 7920 source files; 465 with lifecycle signals
+# skipped: 4687 test, 4472 vendored or tool directory, 1393 generated (name), 5 top-level build/, 5 generated (header)
+  12  pkg/kubelet/pod_workers.go  (hotspot lines 413-442 of 1783)
+      identifiers: deleted bool:413, finished bool:421, IsFinished:439, IsDeleted:441, IsStarted:442, syncedAt:384, ...
+   8  pkg/printers/internalversion/printers.go  (hotspot lines 1312-1324 of 3827)
+      identifiers: status string:1312, FinishedAt:1004, hasRunning:1052, Running:1078, failed bool:2360, isFailed:3370
+      status values: status=complete:1314, status=failed:1316, status=terminating:1318, status=suspended:1320, ...
 ```
 
-It skips tests, vendored, generated and minified code, and runs in a second or two on large repositories. It points
-the auditors at places to look; it does not decide what counts as a finding.
+A file's score is its densest 40-line cluster of lifecycle signals:
+- flags such as `isLoading`
+- timestamps used as states, such as `StartedAt`
+- boolean fields named after a lifecycle, such as `Paid bool`
+- status fields stored as plain ints or strings
+- status values compared or assigned as literals
+
+It doesn't count enum members, constants, union types, JSX attributes, HTTP codes, or words inside strings and
+comments. These are all things explicit machines look like.
+
+The output starts with a summary of what was skipped and why. On an 8–10-core Mac it takes about 3 seconds on
+Kubernetes, 6 on VS Code and 20 on LLVM. It ranks by names, so it points the auditors at places to look; it does not
+decide what counts as a finding.
+
+## Project conventions win
+
+The rubrics read `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and the explicit state types your code already has, and
+copy their shape. Put your project's rule for lifecycles, your gate and install commands, and anything off-limits
+there; Statecraft follows them.
 
 ## Regenerating the animations
 
