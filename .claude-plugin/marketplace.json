@@ -1,0 +1,12 @@
+{
+  "name": "statecraft",
+  "owner": { "name": "rolottr", "url": "https://github.com/rolottr" },
+  "description": "Find and fix implicit state machines in any codebase.",
+  "plugins": [
+    {
+      "name": "statecraft",
+      "source": "./",
+      "description": "Audits a diff or a whole codebase for lifecycles held in clusters of flags, then converts them to explicit, tested state machines behind the project's own quality gate."
+    }
+  ]
+}
